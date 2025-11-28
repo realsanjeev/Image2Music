@@ -23,7 +23,7 @@ def hue2freq(hue: int, scale_freqs: Sequence[float]) -> float:
     float
         The frequency corresponding to the hue value.
     """
-    thresholds = [26, 52, 78, 104, 128, 154, 180]
+    # thresholds = [26, 52, 78, 104, 128, 154, 180]
     # thresholds = [25, 50, 75, 101, 126, 151, 179]  # 7 thresholds for 0-179 hue range
 
     if not scale_freqs:
@@ -32,15 +32,20 @@ def hue2freq(hue: int, scale_freqs: Sequence[float]) -> float:
         logger.warning(f"Hue value {hue} out of range [0, 255], returning default frequency")
         return scale_freqs[0]
     
-    if len(thresholds) > len(scale_freqs):
-        logger.warning(
-            "Number of thresholds (%d) exceeds number of scale frequencies (%d). "
-            "Wrapping frequencies using modulo.",
-            len(thresholds), len(scale_freqs)
-        )
+    # Dynamic mapping based on the number of notes in the scale
+    # We map the hue range [0, 180) to indices [0, len(scale_freqs))
+    # Note: OpenCV hues are typically 0-179.
     
-    index = np.searchsorted(thresholds, hue, side='right')
-    return scale_freqs[index % len(scale_freqs)]
+    num_notes = len(scale_freqs)
+    
+    # Calculate index proportionally
+    # If hue is 179 and num_notes is 7: 179 / 180 * 7 = 6.96 -> 6
+    index = int(hue / 180 * num_notes)
+    
+    # Clamp index to be safe (in case hue >= 180)
+    index = min(index, num_notes - 1)
+    
+    return scale_freqs[index]
 
 def hues_to_frequencies(hues: Sequence[int], scale_freqs: List[float]) -> np.ndarray:
     """
