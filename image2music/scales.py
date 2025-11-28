@@ -86,8 +86,20 @@ def make_scale(octave: int, key: str, scale: str, make_harmony: str = "U0") -> T
     harmony_val = harmony_select.get(make_harmony, 1)
 
     freqs, harmony = [], []
+    
+    # Calculate the index where the chromatic scale wraps around
+    # rotated_notes = chromatic_notes[index:] + chromatic_notes[:index]
+    # The first part has length len(chromatic_notes) - index.
+    # Any index >= wrap_index comes from the second part (chromatic_notes[:index]),
+    # which means it belongs to the next octave.
+    wrap_index = len(chromatic_notes) - index
+
     for i in scales_dict[scale]:
-        note_name = rotated_notes[i] + str(octave)
+        current_octave = octave
+        if i >= wrap_index:
+            current_octave += 1
+            
+        note_name = rotated_notes[i] + str(current_octave)
         freq_to_add = note_freqs.get(note_name)
         if freq_to_add is not None:
             freqs.append(freq_to_add)
