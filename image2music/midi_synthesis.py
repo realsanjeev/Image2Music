@@ -54,8 +54,9 @@ def frequencies_to_midi_stream(
     
     pixel_df["notes"] = pixel_df["frequency"].apply(librosa.hz_to_note)
     
-    # Map amplitude (0.1-1.0) to velocity (0-127)
-    pixel_df["velocity"] = (pixel_df["amplitude"] * 127).astype(int)
+    # Map amplitude (0.1-1.0) to velocity (60-127) for better audibility
+    # 0.1 -> 60, 1.0 -> 127
+    pixel_df["velocity"] = (60 + pixel_df["amplitude"] * 67).astype(int)
 
     logger.info("Creating MIDI stream with %d notes...", len(pixel_df))
     midi_stream = stream.Stream()

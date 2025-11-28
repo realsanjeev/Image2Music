@@ -2,9 +2,42 @@ import cv2
 import numpy as np
 from typing import Union
 
-def load_image(image: Union[str, np.ndarray], size: tuple = (26, 26)) -> np.ndarray:
+def lab_to_lch(lab_img: np.ndarray) -> np.ndarray:
     """
-    Load an image and convert it to HSV format with specified size.
+    Convert LAB image to LCH (Lightness, Chroma, Hue) color space.
+    
+    Parameters
+    ----------
+    lab_img : np.ndarray
+        LAB image from OpenCV (L: 0-255, A: 0-255, B: 0-255)
+        
+    Returns
+    -------
+    np.ndarray
+        LCH image (L: 0-100, C: 0-100+, H: 0-360)
+    """
+    # OpenCV LAB ranges:
+    # L: 0-255 (should be 0-100, so divide by 2.55)
+    # A: 0-255 (should be -128 to 127, so subtract 128)
+    # B: 0-255 (should be -128 to 127, so subtract 128)
+    
+    L = lab_img[:, :, 0] / 2.55  # Convert to 0-100
+    A = lab_img[:, :, 1].astype(float) - 128  # Convert to -128 to 127
+    B = lab_img[:, :, 2].astype(float) - 128  # Convert to -128 to 127
+    
+    # Calculate Chroma and Hue
+    C = np.sqrt(A**2 + B**2)  # Chroma
+    H = np.arctan2(B, A) * 180 / np.pi  # Hue in degrees
+    H = (H + 360) % 360  # Ensure 0-360 range
+    
+    # Stack into LCH image
+    lch_img = np.stack([L, C, H], axis=2)
+    return lch_img
+
+
+def load_image(image: Union[str, np.ndarray], size: tuple = (26, 26), color_space: str = 'hsv') -> np.ndarray:
+    """
+    Load an image and convert it to specified color space with specified size.
 
     Parameters
     ----------
@@ -12,11 +45,13 @@ def load_image(image: Union[str, np.ndarray], size: tuple = (26, 26)) -> np.ndar
         File path to image or raw image array (in BGR).
     size : tuple
         Size to resize the image to (width, height).
+    color_space : str
+        Color space to convert to: 'hsv', 'lab', or 'lch'
 
     Returns
     -------
     np.ndarray
-        HSV image resized to specified shape.
+        Image in specified color space, resized to specified shape.
     """
     if isinstance(image, str):
         img = cv2.imread(image)
@@ -27,10 +62,21 @@ def load_image(image: Union[str, np.ndarray], size: tuple = (26, 26)) -> np.ndar
     else:
         raise ValueError(f"Unsupported image type: {type(image)}")
 
-    # Resize and convert to HSV
+    # Resize
     resized_img = cv2.resize(img, size)
-    hsv_img = cv2.cvtColor(resized_img, cv2.COLOR_BGR2HSV)
-    return hsv_img
+    
+    # Convert to requested color space
+    if color_space == 'hsv':
+        converted_img = cv2.cvtColor(resized_img, cv2.COLOR_BGR2HSV)
+    elif color_space == 'lab':
+        converted_img = cv2.cvtColor(resized_img, cv2.COLOR_BGR2LAB)
+    elif color_space == 'lch':
+        lab_img = cv2.cvtColor(resized_img, cv2.COLOR_BGR2LAB)
+        converted_img = lab_to_lch(lab_img)
+    else:
+        raise ValueError(f"Unsupported color space: {color_space}. Choose 'hsv', 'lab', or 'lch'.")
+    
+    return converted_img
 
 
 def sample_grid(hsv_img: np.ndarray, step: int = 4) -> np.ndarray:
@@ -179,52 +225,75 @@ def sample_weighted(hsv_img: np.ndarray, num_samples: int = 50) -> np.ndarray:
 
 
 def extract_pixel_data(
-    hsv_img: np.ndarray, 
+    img: np.ndarray, 
     sampling_strategy: str = 'all',
     step: int = 4,
-    num_samples: int = 50
+    num_samples: int = 50,
+    color_space: str = 'hsv'
 ) -> dict:
     """
-    Extract Hue, Saturation, and Value channels from an HSV image with optional sampling.
+    Extract color channels from an image with optional sampling.
 
     Parameters
     ----------
-    hsv_img : np.ndarray
-        HSV image of shape (H, W, 3)
+    img : np.ndarray
+        Image in specified color space (H, W, 3)
     sampling_strategy : str
         Sampling strategy: 'all', 'grid', 'spiral', 'edges', 'weighted'
     step : int
         Step size for grid sampling
     num_samples : int
         Number of samples for non-grid strategies
+    color_space : str
+        Color space of input image: 'hsv', 'lab', 'lch'
 
     Returns
     -------
     dict
-        Dictionary containing 'hue', 'saturation', and 'value' 1D arrays.
+        Dictionary containing color channel arrays with appropriate names.
+        HSV: 'hue', 'saturation', 'value'
+        LAB: 'lightness', 'a', 'b'
+        LCH: 'lightness', 'chroma', 'hue'
     """
     if sampling_strategy == 'grid':
-        samples = sample_grid(hsv_img, step)
+        samples = sample_grid(img, step)
     elif sampling_strategy == 'spiral':
-        samples = sample_spiral(hsv_img, num_samples)
+        samples = sample_spiral(img, num_samples)
     elif sampling_strategy == 'edges':
-        samples = sample_edges(hsv_img, num_samples)
+        samples = sample_edges(img, num_samples)
     elif sampling_strategy == 'weighted':
-        samples = sample_weighted(hsv_img, num_samples)
+        samples = sample_weighted(img, num_samples)
     else:  # 'all'
-        h, s, v = cv2.split(hsv_img)
-        return {
-            'hue': h.flatten(),
-            'saturation': s.flatten(),
-            'value': v.flatten()
-        }
+        ch1, ch2, ch3 = cv2.split(img)
+        samples = None
     
-    # Extract channels from samples
-    return {
-        'hue': samples[:, 0],
-        'saturation': samples[:, 1],
-        'value': samples[:, 2]
-    }
+    # Extract channels based on color space
+    if samples is not None:
+        ch1, ch2, ch3 = samples[:, 0], samples[:, 1], samples[:, 2]
+    else:
+        ch1, ch2, ch3 = ch1.flatten(), ch2.flatten(), ch3.flatten()
+    
+    # Return with appropriate channel names
+    if color_space == 'hsv':
+        return {
+            'hue': ch1,
+            'saturation': ch2,
+            'value': ch3
+        }
+    elif color_space == 'lab':
+        return {
+            'lightness': ch1 / 2.55,  # Convert to 0-100
+            'a': ch2.astype(float) - 128,  # Convert to -128 to 127
+            'b': ch3.astype(float) - 128   # Convert to -128 to 127
+        }
+    elif color_space == 'lch':
+        return {
+            'lightness': ch1,  # Already 0-100
+            'chroma': ch2,     # Already computed
+            'hue': ch3         # Already 0-360
+        }
+    else:
+        raise ValueError(f"Unsupported color space: {color_space}")
 
 
 def extract_hues(hsv_img: np.ndarray) -> np.ndarray:

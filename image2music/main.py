@@ -108,6 +108,13 @@ def parse_args() -> argparse.Namespace:
         default=8,
         help="Insert rest every N notes (0 = no phrases)."
     )
+    parser.add_argument(
+        "--color-space",
+        type=str,
+        default="lch",
+        choices=["hsv", "lab", "lch"],
+        help="Color space for image analysis (lch recommended for perceptual accuracy)."
+    )
     return parser.parse_args()
 
 
@@ -137,7 +144,8 @@ def main():
             grid_step=args.grid_step,
             num_samples=args.num_samples,
             smooth_window=args.smooth,
-            phrase_length=args.phrase_length
+            phrase_length=args.phrase_length,
+            color_space=args.color_space
         )
         logger.info("Music generation complete! File saved to: %s", output_path)
     except Exception as e:

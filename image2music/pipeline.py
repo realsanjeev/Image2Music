@@ -27,7 +27,8 @@ def convert_image_to_music(
     grid_step: int = 4,
     num_samples: int = 50,
     smooth_window: int = 3,
-    phrase_length: int = 8
+    phrase_length: int = 8,
+    color_space: str = "lch"
 ) -> None:
     """
     Convert an image into music (WAV + optional MIDI) by mapping pixel properties to musical parameters.
@@ -50,25 +51,28 @@ def convert_image_to_music(
         Window size for parameter smoothing (0 = no smoothing)
     phrase_length : int
         Insert rest every N notes (0 = no phrases)
+    color_space : str
+        Color space for image analysis: 'hsv', 'lab', 'lch' (default: 'lch')
     """
     logger.info("Loading image: %s", image_path)
-    img = load_image(image_path)
+    img = load_image(image_path, color_space=color_space)
 
-    logger.info("Extracting pixel data with '%s' sampling...", sampling_strategy)
+    logger.info("Extracting pixel data with '%s' sampling in %s color space...", sampling_strategy, color_space.upper())
     pixel_data = extract_pixel_data(
         img, 
         sampling_strategy=sampling_strategy,
         step=grid_step,
-        num_samples=num_samples
+        num_samples=num_samples,
+        color_space=color_space
     )
     
-    logger.info("Sampled %d pixels", len(pixel_data['hue']))
+    logger.info("Sampled %d pixels", len(pixel_data[list(pixel_data.keys())[0]]))
 
     logger.info("Generating scale: %s %s octave %d", key, scale_name, octave)
     scale_freqs, _ = make_scale(octave=octave, key=key.lower(), scale=scale_name)
 
     logger.info("Mapping pixels to musical properties...")
-    df = hues_dataframe(pixel_data, scale_freqs, base_duration=duration_per_note)
+    df = hues_dataframe(pixel_data, scale_freqs, base_duration=duration_per_note, color_space=color_space)
     
     # Apply smoothing if requested
     if smooth_window > 1:

@@ -7,42 +7,43 @@ from .logger import get_logger
 logger = get_logger(__name__)
 
 
-def hue2freq(hue: int, scale_freqs: Sequence[float]) -> float:
+def hue2freq(hue: float, scale_freqs: Sequence[float], color_space: str = 'hsv') -> float:
     """
     Map a hue value to a frequency in the given musical scale.
 
     Parameters
     ----------
-    hue : int
-        Hue value (0–255) from an HSV image.
+    hue : float
+        Hue value (HSV: 0-179, LCH: 0-360, LAB: computed angle)
     scale_freqs : Sequence[float]
-        Sequence of frequencies for the scale (e.g., Harmonic Minor).
+        Sequence of frequencies for the scale.
+    color_space : str
+        Color space: 'hsv', 'lab', 'lch'
 
     Returns
     -------
     float
         The frequency corresponding to the hue value.
     """
-    # thresholds = [26, 52, 78, 104, 128, 154, 180]
-    # thresholds = [25, 50, 75, 101, 126, 151, 179]  # 7 thresholds for 0-179 hue range
-
     if not scale_freqs:
         raise ValueError("scale_freqs must not be empty")
-    if not 0 <= hue <= 255:
-        logger.warning(f"Hue value {hue} out of range [0, 255], returning default frequency")
-        return scale_freqs[0]
     
-    # Dynamic mapping based on the number of notes in the scale
-    # We map the hue range [0, 180) to indices [0, len(scale_freqs))
-    # Note: OpenCV hues are typically 0-179.
+    # Determine hue range based on color space
+    if color_space == 'hsv':
+        max_hue = 180  # OpenCV HSV hue is 0-179
+        if not 0 <= hue <= 255:
+            logger.warning(f"Hue value {hue} out of range, returning default frequency")
+            return scale_freqs[0]
+    elif color_space in ['lch', 'lab']:
+        max_hue = 360  # LCH/LAB hue is 0-360 degrees
+        if not 0 <= hue <= 360:
+            logger.warning(f"Hue value {hue} out of range [0, 360], returning default frequency")
+            return scale_freqs[0]
+    else:
+        raise ValueError(f"Unsupported color space: {color_space}")
     
     num_notes = len(scale_freqs)
-    
-    # Calculate index proportionally
-    # If hue is 179 and num_notes is 7: 179 / 180 * 7 = 6.96 -> 6
-    index = int(hue / 180 * num_notes)
-    
-    # Clamp index to be safe (in case hue >= 180)
+    index = int(hue / max_hue * num_notes)
     index = min(index, num_notes - 1)
     
     return scale_freqs[index]
@@ -71,37 +72,62 @@ def hues_to_frequencies(hues: Sequence[int], scale_freqs: List[float]) -> np.nda
     logger.info("Converted hues to frequencies array of shape %s", freqs_array.shape)
     return freqs_array
 
-def map_saturation_to_amplitude(saturation: int) -> float:
+def map_to_amplitude(value: float, color_space: str = 'hsv') -> float:
     """
-    Map saturation (0-255) to amplitude (0.1-1.0).
+    Map color channel to amplitude (0.1-1.0).
+    
+    HSV: Saturation (0-255)
+    LAB/LCH: Lightness (0-100)
     """
-    # Normalize 0-255 to 0-1
-    norm = saturation / 255.0
-    # Map to 0.1 - 1.0 range
+    if color_space == 'hsv':
+        # Saturation 0-255
+        norm = value / 255.0
+    elif color_space in ['lab', 'lch']:
+        # Lightness 0-100
+        norm = value / 100.0
+    else:
+        norm = 0.5
+    
     return 0.1 + (norm * 0.9)
 
-def map_value_to_duration(value: int, base_duration: float) -> float:
+def map_to_duration(value: float, base_duration: float, color_space: str = 'hsv') -> float:
     """
-    Map value (0-255) to duration multiplier (0.5x - 2.0x).
+    Map color channel to duration multiplier (0.5x - 2.0x).
+    
+    HSV: Value (0-255)
+    LCH: Chroma (0-100+)
+    LAB: Computed chroma from a/b
     """
-    # Normalize 0-255 to 0-1
-    norm = value / 255.0
-    # Map to 0.5 - 2.0 range
+    if color_space == 'hsv':
+        # Value 0-255
+        norm = value / 255.0
+    elif color_space == 'lch':
+        # Chroma 0-100+ (can exceed, so clamp)
+        norm = min(value / 100.0, 1.0)
+    elif color_space == 'lab':
+        # Compute chroma from a/b (already done in extract_pixel_data)
+        # Assume value is already normalized
+        norm = min(value / 100.0, 1.0)
+    else:
+        norm = 0.5
+    
     multiplier = 0.5 + (norm * 1.5)
     return base_duration * multiplier
 
-def hues_dataframe(pixel_data: dict, scale_freqs: List[float], base_duration: float = 0.1) -> pd.DataFrame:
+def hues_dataframe(pixel_data: dict, scale_freqs: List[float], base_duration: float = 0.1, color_space: str = 'hsv') -> pd.DataFrame:
     """
     Create a pandas DataFrame with pixel data and mapped musical properties.
 
     Parameters
     ----------
     pixel_data : dict
-        Dictionary with 'hue', 'saturation', 'value' arrays.
+        Dictionary with color channel arrays (channel names depend on color_space).
     scale_freqs : List[float]
         Frequencies for the chosen musical scale.
     base_duration : float
         Base duration for notes.
+    color_space : str
+        Color space: 'hsv', 'lab', 'lch'
 
     Returns
     -------
@@ -110,21 +136,38 @@ def hues_dataframe(pixel_data: dict, scale_freqs: List[float], base_duration: fl
     """
     if not scale_freqs:
         raise ValueError("scale_freqs must not be empty")
-        
-    hues = pixel_data['hue']
-    sats = pixel_data['saturation']
-    vals = pixel_data['value']
+    
+    # Extract appropriate channels based on color space
+    if color_space == 'hsv':
+        hues = pixel_data['hue']
+        amp_channel = pixel_data['saturation']
+        dur_channel = pixel_data['value']
+    elif color_space == 'lch':
+        hues = pixel_data['hue']
+        amp_channel = pixel_data['lightness']
+        dur_channel = pixel_data['chroma']
+    elif color_space == 'lab':
+        # Compute hue from a/b
+        a = pixel_data['a']
+        b = pixel_data['b']
+        hues = np.arctan2(b, a) * 180 / np.pi
+        hues = (hues + 360) % 360
+        amp_channel = pixel_data['lightness']
+        # Compute chroma from a/b
+        dur_channel = np.sqrt(a**2 + b**2)
+    else:
+        raise ValueError(f"Unsupported color space: {color_space}")
     
     logger.debug("Creating DataFrame for %d pixels", len(hues))
     df = pd.DataFrame({
         "hue": hues,
-        "saturation": sats,
-        "value": vals
+        "amp_channel": amp_channel,
+        "dur_channel": dur_channel
     })
     
-    df["frequency"] = df["hue"].apply(lambda h: hue2freq(h, scale_freqs))
-    df["amplitude"] = df["saturation"].apply(map_saturation_to_amplitude)
-    df["duration"] = df["value"].apply(lambda v: map_value_to_duration(v, base_duration))
+    df["frequency"] = df["hue"].apply(lambda h: hue2freq(h, scale_freqs, color_space))
+    df["amplitude"] = df["amp_channel"].apply(lambda v: map_to_amplitude(v, color_space))
+    df["duration"] = df["dur_channel"].apply(lambda v: map_to_duration(v, base_duration, color_space))
     
     logger.info("Generated DataFrame with %d rows", len(df))
     return df
