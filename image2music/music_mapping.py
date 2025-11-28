@@ -71,26 +71,60 @@ def hues_to_frequencies(hues: Sequence[int], scale_freqs: List[float]) -> np.nda
     logger.info("Converted hues to frequencies array of shape %s", freqs_array.shape)
     return freqs_array
 
-def hues_dataframe(hues: Sequence[int], scale_freqs: List[float]) -> pd.DataFrame:
+def map_saturation_to_amplitude(saturation: int) -> float:
     """
-    Create a pandas DataFrame with hues and their corresponding frequencies.
+    Map saturation (0-255) to amplitude (0.1-1.0).
+    """
+    # Normalize 0-255 to 0-1
+    norm = saturation / 255.0
+    # Map to 0.1 - 1.0 range
+    return 0.1 + (norm * 0.9)
+
+def map_value_to_duration(value: int, base_duration: float) -> float:
+    """
+    Map value (0-255) to duration multiplier (0.5x - 2.0x).
+    """
+    # Normalize 0-255 to 0-1
+    norm = value / 255.0
+    # Map to 0.5 - 2.0 range
+    multiplier = 0.5 + (norm * 1.5)
+    return base_duration * multiplier
+
+def hues_dataframe(pixel_data: dict, scale_freqs: List[float], base_duration: float = 0.1) -> pd.DataFrame:
+    """
+    Create a pandas DataFrame with pixel data and mapped musical properties.
 
     Parameters
     ----------
-    hues : Sequence[int]
-        List or array of hue values.
+    pixel_data : dict
+        Dictionary with 'hue', 'saturation', 'value' arrays.
     scale_freqs : List[float]
         Frequencies for the chosen musical scale.
+    base_duration : float
+        Base duration for notes.
 
     Returns
     -------
     pd.DataFrame
-        DataFrame with 'hues' and 'frequencies' columns.
+        DataFrame with musical properties.
     """
     if not scale_freqs:
         raise ValueError("scale_freqs must not be empty")
-    logger.debug("Creating DataFrame for %d hues", len(hues))
-    df = pd.DataFrame({"hues": hues})
-    df["frequencies"] = df["hues"].apply(lambda h: hue2freq(h, scale_freqs))
+        
+    hues = pixel_data['hue']
+    sats = pixel_data['saturation']
+    vals = pixel_data['value']
+    
+    logger.debug("Creating DataFrame for %d pixels", len(hues))
+    df = pd.DataFrame({
+        "hue": hues,
+        "saturation": sats,
+        "value": vals
+    })
+    
+    df["frequency"] = df["hue"].apply(lambda h: hue2freq(h, scale_freqs))
+    df["amplitude"] = df["saturation"].apply(map_saturation_to_amplitude)
+    df["duration"] = df["value"].apply(lambda v: map_value_to_duration(v, base_duration))
+    
     logger.info("Generated DataFrame with %d rows", len(df))
     return df

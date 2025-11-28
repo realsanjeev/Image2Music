@@ -37,9 +37,15 @@ def apply_envelope(wave: np.ndarray, fade_duration: float, sample_rate: int) -> 
     return wave
 
 
-def generate_song(frequencies: Sequence[float], duration: float, sample_rate: int = 44100, use_octaves: bool = True) -> np.ndarray:
+def generate_song(
+    frequencies: Sequence[float], 
+    amplitudes: Sequence[float],
+    durations: Sequence[float],
+    sample_rate: int = 44100, 
+    use_octaves: bool = True
+) -> np.ndarray:
     """
-    Generate a song waveform from a list of frequencies.
+    Generate a song waveform from lists of frequencies, amplitudes, and durations.
     """
     song_parts = []
     octaves = np.array([0.5, 1, 2]) if use_octaves else np.array([1])
@@ -47,9 +53,9 @@ def generate_song(frequencies: Sequence[float], duration: float, sample_rate: in
     # 10ms fade to prevent clicks
     fade_duration = 0.01 
 
-    for freq in frequencies:
+    for freq, amp, dur in zip(frequencies, amplitudes, durations):
         octave = np.random.choice(octaves)
-        note_wave = generate_sine_wave(freq * octave, duration, sample_rate)
+        note_wave = generate_sine_wave(freq * octave, dur, sample_rate, amplitude=amp)
         note_wave = apply_envelope(note_wave, fade_duration, sample_rate)
         song_parts.append(note_wave)
 

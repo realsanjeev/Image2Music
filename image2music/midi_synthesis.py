@@ -15,7 +15,6 @@ logger = get_logger(__name__)
 def frequencies_to_midi_stream(
     pixel_df: pd.DataFrame,
     bpm: int = 120,
-    note_duration: float = 0.5,
     filter_repeats: bool = True
 ) -> stream.Stream:
     """
@@ -24,11 +23,9 @@ def frequencies_to_midi_stream(
     Parameters
     ----------
     pixel_df : pd.DataFrame
-        DataFrame with at least a 'frequencies' column.
+        DataFrame with 'frequency', 'duration', and 'amplitude' columns.
     bpm : int
         Beats per minute for the MIDI file.
-    note_duration : float
-        Duration of each note in quarter lengths.
     filter_repeats : bool
         Whether to remove consecutive duplicate notes.
 
@@ -37,32 +34,35 @@ def frequencies_to_midi_stream(
     stream.Stream
         A music21 Stream containing the MIDI notes.
     """
-    if "frequencies" not in pixel_df.columns:
-        raise ValueError("pixel_df must contain a 'frequencies' column.")
+    required_cols = ["frequency", "duration", "amplitude"]
+    for col in required_cols:
+        if col not in pixel_df.columns:
+            raise ValueError(f"pixel_df must contain a '{col}' column.")
     
     logger.info("Converting frequencies to musical notes...")
     pixel_df = pixel_df.copy()
-    pixel_df["notes"] = pixel_df["frequencies"].apply(librosa.hz_to_note)
-    pixel_df["midi_number"] = pixel_df["notes"].apply(librosa.note_to_midi)
+    pixel_df["notes"] = pixel_df["frequency"].apply(librosa.hz_to_note)
+    
+    # Map amplitude (0.1-1.0) to velocity (0-127)
+    pixel_df["velocity"] = (pixel_df["amplitude"] * 127).astype(int)
 
-    notes_array = pixel_df["notes"].to_numpy()
-
-    if filter_repeats:
-        logger.info("Filtering consecutive duplicate notes...")
-        filtered_notes = []
-        for element in notes_array:
-            if not filtered_notes or element != filtered_notes[-1]:
-                filtered_notes.append(element)
-        notes_array = np.array(filtered_notes)
-
-    logger.info("Creating MIDI stream with %d notes...", len(notes_array))
+    logger.info("Creating MIDI stream with %d notes...", len(pixel_df))
     midi_stream = stream.Stream()
     midi_stream.append(tempo.MetronomeMark(number=bpm))
 
-    for element in tqdm(notes_array, desc="Adding notes"):
-        pitch = element.replace('♯', "#")  # Ensure sharp symbol is MIDI-friendly
+    # Pre-calculate seconds per beat
+    seconds_per_beat = 60.0 / bpm
+
+    for _, row in tqdm(pixel_df.iterrows(), total=len(pixel_df), desc="Adding notes"):
+        pitch = row["notes"].replace('♯', "#")
         midi_note = note.Note(pitch)
-        midi_note.quarterLength = note_duration
+        
+        # Duration to quarterLength
+        midi_note.quarterLength = row["duration"] / seconds_per_beat
+        
+        # Velocity
+        midi_note.volume.velocity = row["velocity"]
+        
         midi_stream.append(midi_note)
 
     return midi_stream
