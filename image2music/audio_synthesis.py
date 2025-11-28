@@ -18,18 +18,42 @@ def generate_sine_wave(frequency: float, duration: float, sample_rate: int = 441
     return wave
 
 
+def apply_envelope(wave: np.ndarray, fade_duration: float, sample_rate: int) -> np.ndarray:
+    """
+    Apply a linear fade-in and fade-out envelope to the waveform.
+    """
+    fade_samples = int(fade_duration * sample_rate)
+    if fade_samples * 2 > len(wave):
+        fade_samples = len(wave) // 2
+    
+    # Fade in
+    fade_in = np.linspace(0, 1, fade_samples)
+    wave[:fade_samples] *= fade_in
+    
+    # Fade out
+    fade_out = np.linspace(1, 0, fade_samples)
+    wave[-fade_samples:] *= fade_out
+    
+    return wave
+
+
 def generate_song(frequencies: Sequence[float], duration: float, sample_rate: int = 44100, use_octaves: bool = True) -> np.ndarray:
     """
     Generate a song waveform from a list of frequencies.
     """
-    song = np.array([])
+    song_parts = []
     octaves = np.array([0.5, 1, 2]) if use_octaves else np.array([1])
+    
+    # 10ms fade to prevent clicks
+    fade_duration = 0.01 
 
     for freq in frequencies:
         octave = np.random.choice(octaves)
         note_wave = generate_sine_wave(freq * octave, duration, sample_rate)
-        song = np.concatenate([song, note_wave])
+        note_wave = apply_envelope(note_wave, fade_duration, sample_rate)
+        song_parts.append(note_wave)
 
+    song = np.concatenate(song_parts)
     logger.info("Generated song with %d notes", len(frequencies))
     return song
 

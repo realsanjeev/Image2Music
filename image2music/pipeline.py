@@ -61,6 +61,17 @@ def convert_image_to_music(
     if midi_output_path:
         logger.info("Converting frequencies to MIDI notes...")
         hues_df = hues_dataframe(hues, scale_freqs)
-        midi_stream = frequencies_to_midi_stream(hues_df)
+        
+        # Calculate quarterLength based on duration_per_note and bpm
+        # 1 beat = 60 / bpm seconds
+        # quarterLength = duration_per_note / (60 / bpm)
+        quarter_length = duration_per_note / (60 / bpm)
+        
+        midi_stream = frequencies_to_midi_stream(
+            hues_df, 
+            bpm=bpm, 
+            note_duration=quarter_length, 
+            filter_repeats=False # Match audio (no filtering)
+        )
         save_midi(midi_stream, midi_output_path)
         logger.info("MIDI file saved to: %s", midi_output_path)
