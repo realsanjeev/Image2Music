@@ -5,7 +5,7 @@ from pathlib import Path
 from .logger import get_logger
 from .image_utils import load_image, extract_pixel_data
 from .scales import make_scale
-from .music_mapping import hues_dataframe
+from .music_mapping import hues_dataframe, smooth_parameters, add_phrase_boundaries
 from .audio_synthesis import generate_song, save_wav
 from .midi_synthesis import frequencies_to_midi_stream, save_midi
 
@@ -22,10 +22,15 @@ def convert_image_to_music(
     sample_rate: int = 22050,
     use_octaves: bool = True,
     midi_output_path: str = None,
-    bpm: int = 120
+    bpm: int = 120,
+    sampling_strategy: str = "grid",
+    grid_step: int = 4,
+    num_samples: int = 50,
+    smooth_window: int = 3,
+    phrase_length: int = 8
 ) -> None:
     """
-    Convert an image into music (WAV + optional MIDI) by mapping pixel hues to scale frequencies.
+    Convert an image into music (WAV + optional MIDI) by mapping pixel properties to musical parameters.
 
     Parameters
     ----------
@@ -35,18 +40,43 @@ def convert_image_to_music(
         Path to save the generated WAV file.
     midi_output_path : str
         Path to save the generated MIDI file.
+    sampling_strategy : str
+        Pixel sampling strategy: 'all', 'grid', 'spiral', 'edges', 'weighted'
+    grid_step : int
+        Step size for grid sampling
+    num_samples : int
+        Number of samples for non-grid strategies
+    smooth_window : int
+        Window size for parameter smoothing (0 = no smoothing)
+    phrase_length : int
+        Insert rest every N notes (0 = no phrases)
     """
     logger.info("Loading image: %s", image_path)
     img = load_image(image_path)
 
-    logger.info("Extracting pixel data (Hue, Saturation, Value)...")
-    pixel_data = extract_pixel_data(img)
+    logger.info("Extracting pixel data with '%s' sampling...", sampling_strategy)
+    pixel_data = extract_pixel_data(
+        img, 
+        sampling_strategy=sampling_strategy,
+        step=grid_step,
+        num_samples=num_samples
+    )
+    
+    logger.info("Sampled %d pixels", len(pixel_data['hue']))
 
     logger.info("Generating scale: %s %s octave %d", key, scale_name, octave)
     scale_freqs, _ = make_scale(octave=octave, key=key.lower(), scale=scale_name)
 
     logger.info("Mapping pixels to musical properties...")
     df = hues_dataframe(pixel_data, scale_freqs, base_duration=duration_per_note)
+    
+    # Apply smoothing if requested
+    if smooth_window > 1:
+        df = smooth_parameters(df, window_size=smooth_window)
+    
+    # Add phrase boundaries if requested
+    if phrase_length > 0:
+        df = add_phrase_boundaries(df, phrase_length=phrase_length)
 
     logger.info("Generating song waveform...")
     song = generate_song(

@@ -54,9 +54,16 @@ def generate_song(
     fade_duration = 0.01 
 
     for freq, amp, dur in zip(frequencies, amplitudes, durations):
-        octave = np.random.choice(octaves)
-        note_wave = generate_sine_wave(freq * octave, dur, sample_rate, amplitude=amp)
-        note_wave = apply_envelope(note_wave, fade_duration, sample_rate)
+        # Handle rest notes (frequency = 0)
+        if freq == 0 or amp == 0:
+            # Generate silence
+            num_samples = int(dur * sample_rate)
+            note_wave = np.zeros(num_samples)
+        else:
+            octave = np.random.choice(octaves)
+            note_wave = generate_sine_wave(freq * octave, dur, sample_rate, amplitude=amp)
+            note_wave = apply_envelope(note_wave, fade_duration, sample_rate)
+        
         song_parts.append(note_wave)
 
     song = np.concatenate(song_parts)

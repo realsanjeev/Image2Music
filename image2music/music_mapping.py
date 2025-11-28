@@ -128,3 +128,71 @@ def hues_dataframe(pixel_data: dict, scale_freqs: List[float], base_duration: fl
     
     logger.info("Generated DataFrame with %d rows", len(df))
     return df
+
+
+def smooth_parameters(df: pd.DataFrame, window_size: int = 3) -> pd.DataFrame:
+    """
+    Apply moving average smoothing to musical parameters.
+    
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with 'frequency', 'amplitude', 'duration' columns
+    window_size : int
+        Window size for moving average (must be odd)
+        
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with smoothed parameters
+    """
+    if window_size <= 1:
+        return df
+    
+    df = df.copy()
+    
+    # Apply rolling mean
+    df['frequency'] = df['frequency'].rolling(window=window_size, center=True, min_periods=1).mean()
+    df['amplitude'] = df['amplitude'].rolling(window=window_size, center=True, min_periods=1).mean()
+    df['duration'] = df['duration'].rolling(window=window_size, center=True, min_periods=1).mean()
+    
+    logger.info("Applied smoothing with window size %d", window_size)
+    return df
+
+
+def add_phrase_boundaries(df: pd.DataFrame, phrase_length: int = 8, rest_duration: float = 0.2) -> pd.DataFrame:
+    """
+    Insert rest notes (silent pauses) at phrase boundaries.
+    
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with musical parameters
+    phrase_length : int
+        Number of notes per phrase (rest inserted after each phrase)
+    rest_duration : float
+        Duration of rest in seconds
+        
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with rest notes inserted
+    """
+    if phrase_length <= 0:
+        return df
+    
+    rows = []
+    for i, row in enumerate(df.iterrows()):
+        rows.append(row[1])
+        
+        # Insert rest after each phrase (except the last)
+        if (i + 1) % phrase_length == 0 and (i + 1) < len(df):
+            rest_row = row[1].copy()
+            rest_row['frequency'] = 0.0  # Silence
+            rest_row['amplitude'] = 0.0
+            rest_row['duration'] = rest_duration
+            rows.append(rest_row)
+    
+    result_df = pd.DataFrame(rows).reset_index(drop=True)
+    logger.info("Added phrase boundaries every %d notes", phrase_length)
+    return result_df

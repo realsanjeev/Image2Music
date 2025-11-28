@@ -41,6 +41,17 @@ def frequencies_to_midi_stream(
     
     logger.info("Converting frequencies to musical notes...")
     pixel_df = pixel_df.copy()
+    
+    # Filter out rest notes (frequency = 0) - MIDI handles rests differently
+    # We'll just skip them for now
+    pixel_df = pixel_df[pixel_df["frequency"] > 0].reset_index(drop=True)
+    
+    if len(pixel_df) == 0:
+        logger.warning("No non-rest notes to convert to MIDI")
+        midi_stream = stream.Stream()
+        midi_stream.append(tempo.MetronomeMark(number=bpm))
+        return midi_stream
+    
     pixel_df["notes"] = pixel_df["frequency"].apply(librosa.hz_to_note)
     
     # Map amplitude (0.1-1.0) to velocity (0-127)

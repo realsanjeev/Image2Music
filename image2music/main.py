@@ -77,6 +77,37 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Disable random octave variations."
     )
+    parser.add_argument(
+        "--sampling",
+        type=str,
+        default="grid",
+        choices=["all", "grid", "spiral", "edges", "weighted"],
+        help="Pixel sampling strategy."
+    )
+    parser.add_argument(
+        "--grid-step",
+        type=int,
+        default=4,
+        help="Step size for grid sampling."
+    )
+    parser.add_argument(
+        "--num-samples",
+        type=int,
+        default=50,
+        help="Number of samples for non-grid strategies."
+    )
+    parser.add_argument(
+        "--smooth",
+        type=int,
+        default=3,
+        help="Smoothing window size (0 = no smoothing)."
+    )
+    parser.add_argument(
+        "--phrase-length",
+        type=int,
+        default=8,
+        help="Insert rest every N notes (0 = no phrases)."
+    )
     return parser.parse_args()
 
 
@@ -101,7 +132,12 @@ def main():
             sample_rate=args.sample_rate,
             use_octaves=not args.no_octaves,
             midi_output_path=args.midi,
-            bpm=args.bpm
+            bpm=args.bpm,
+            sampling_strategy=args.sampling,
+            grid_step=args.grid_step,
+            num_samples=args.num_samples,
+            smooth_window=args.smooth,
+            phrase_length=args.phrase_length
         )
         logger.info("Music generation complete! File saved to: %s", output_path)
     except Exception as e:
