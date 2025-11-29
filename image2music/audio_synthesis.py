@@ -253,3 +253,49 @@ def save_wav(file_path: str, data: np.ndarray, sample_rate: int = 44100) -> None
     """
     wavfile.write(file_path, rate=sample_rate, data=data.astype(np.float32))
     logger.info("Saved WAV file: %s", file_path)
+
+
+def generate_drum_sound(
+    drum_type: str, 
+    sample_rate: int = 44100
+) -> np.ndarray:
+    """
+    Synthesize a drum sound (Kick, Snare, Hi-hat).
+    """
+    if drum_type == 'kick':
+        # Sine sweep: 150Hz -> 50Hz, fast decay
+        duration = 0.3
+        t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
+        freq_sweep = np.linspace(150, 50, len(t))
+        wave = np.sin(2 * np.pi * freq_sweep * t)
+        # Envelope: Fast attack, exponential decay
+        envelope = np.exp(-15 * t)
+        return wave * envelope * 0.8
+        
+    elif drum_type == 'snare':
+        # White noise + Sine sweep
+        duration = 0.2
+        t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
+        
+        # Tone
+        freq_sweep = np.linspace(250, 150, len(t))
+        tone = np.sin(2 * np.pi * freq_sweep * t) * np.exp(-10 * t)
+        
+        # Noise
+        noise = np.random.uniform(-1, 1, len(t)) * np.exp(-15 * t)
+        
+        return (tone * 0.5 + noise * 0.5) * 0.6
+        
+    elif drum_type == 'hihat':
+        # High-pass filtered noise (simulated with random)
+        duration = 0.1
+        t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
+        noise = np.random.uniform(-1, 1, len(t))
+        
+        # Simple high-pass simulation: subtract smoothed version
+        # (Not perfect but works for simple synthesis)
+        # Or just use very short decay on noise
+        envelope = np.exp(-50 * t)
+        return noise * envelope * 0.4
+        
+    return np.zeros(int(0.1 * sample_rate))

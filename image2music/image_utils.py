@@ -379,3 +379,31 @@ def analyze_image_properties(img: np.ndarray, color_space: str = 'lch') -> dict:
         'bpm': bpm,
         'scale': scale
     }
+
+
+def analyze_texture(img: np.ndarray, color_space: str = 'lch') -> float:
+    """
+    Analyze image texture (complexity) using local variance.
+    
+    Returns
+    -------
+    float
+        Texture score (0.0 - 1.0). Higher = more complex/noisy.
+    """
+    # Use Lightness/Value channel
+    if color_space == 'lch':
+        channel = img[:, :, 0]
+    elif color_space == 'lab':
+        channel = img[:, :, 0]
+    elif color_space == 'hsv':
+        channel = img[:, :, 2]
+    else:
+        channel = img[:, :, 0] # Fallback
+        
+    # Calculate standard deviation of the channel
+    # High std dev = high contrast/texture
+    std_dev = np.std(channel)
+    
+    # Normalize (heuristic: std dev of 50 is very high for 0-100 range)
+    texture_score = std_dev / 50.0
+    return min(1.0, max(0.0, texture_score))

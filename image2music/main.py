@@ -146,6 +146,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--auto-bpm", action="store_true", help="Auto-detect BPM from image brightness.")
     parser.add_argument("--auto-scale", action="store_true", help="Auto-detect Scale from image color temperature.")
     parser.add_argument("--multi-track", action="store_true", help="Generate multi-track arrangement (Bass + Melody).")
+    parser.add_argument("--drums", action="store_true", help="Generate percussion track based on image texture.")
     
     return parser.parse_args()
 
@@ -191,7 +192,8 @@ def main():
             use_chords=args.chords,
             auto_bpm=args.auto_bpm,
             auto_scale=args.auto_scale,
-            multi_track=args.multi_track
+            multi_track=args.multi_track,
+            use_drums=args.drums
         )
         logger.info("Music generation complete! File saved to: %s", output_path)
     except Exception as e:

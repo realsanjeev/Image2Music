@@ -43,7 +43,8 @@ def convert_image_to_music(
     use_chords: bool = False,
     auto_bpm: bool = False,
     auto_scale: bool = False,
-    multi_track: bool = False
+    multi_track: bool = False,
+    use_drums: bool = False
 ) -> None:
     """
     Convert an image into music (WAV + optional MIDI) by mapping pixel properties to musical parameters.
@@ -96,9 +97,11 @@ def convert_image_to_music(
         Automatically detect Scale from image color temperature
     multi_track : bool
         Generate separate Bass and Melody tracks and mix them
+    use_drums : bool
+        Generate a percussion track based on image texture
     """
-    from .audio_synthesis import ADSR
-    from .image_utils import analyze_image_properties
+    from .audio_synthesis import ADSR, generate_drum_sound
+    from .image_utils import analyze_image_properties, analyze_texture
     
     logger.info("Loading image: %s", image_path)
     img = load_image(image_path, color_space=color_space)
@@ -122,7 +125,8 @@ def convert_image_to_music(
         track_octave, 
         track_instrument, 
         track_quantize_grid, 
-        track_chords
+        track_chords,
+        is_bass=False
     ):
         logger.info("Extracting pixel data for track...")
         pixel_data = extract_pixel_data(
@@ -154,6 +158,15 @@ def convert_image_to_music(
         if phrase_length > 0:
             df = add_phrase_boundaries(df, phrase_length=phrase_length)
 
+        # Rhythmic Bass Logic
+        if is_bass and quantize:
+            # Force bass to play on beats (simplification)
+            # We'll insert rests to create a groove
+            # Pattern: Note - Rest - Note - Rest
+            for i in range(len(df)):
+                if i % 2 != 0:
+                    df.at[i, 'frequency'] = 0 # Rest
+                    
         track_adsr = ADSR(attack=attack, decay=decay, sustain=sustain, release=release)
         
         return generate_song(
@@ -170,6 +183,50 @@ def convert_image_to_music(
         ), df
 
     final_df = None
+    drum_audio = None
+
+    if use_drums:
+        logger.info("Generating Percussion Track...")
+        texture = analyze_texture(img, color_space=color_space)
+        logger.info("Image Texture Score: %.2f", texture)
+        
+        # Determine drum pattern based on texture
+        # Simple: Kick on 1, 3. Snare on 2, 4.
+        # Complex: 16th notes
+        
+        seconds_per_beat = 60.0 / bpm
+        total_beats = int(num_samples * duration_per_note / seconds_per_beat) # Approx
+        if total_beats < 4: total_beats = 16 # Min length
+        
+        drum_track_len = int(total_beats * seconds_per_beat * sample_rate)
+        drum_audio = np.zeros(drum_track_len)
+        
+        # Basic Beat (Kick/Snare)
+        for beat in range(total_beats):
+            pos = int(beat * seconds_per_beat * sample_rate)
+            if pos >= len(drum_audio): break
+            
+            # Kick on 0, 2 (1 and 3)
+            if beat % 2 == 0:
+                kick = generate_drum_sound('kick', sample_rate)
+                end = min(pos + len(kick), len(drum_audio))
+                drum_audio[pos:end] += kick[:end-pos]
+            
+            # Snare on 1, 3 (2 and 4)
+            if beat % 2 != 0:
+                snare = generate_drum_sound('snare', sample_rate)
+                end = min(pos + len(snare), len(drum_audio))
+                drum_audio[pos:end] += snare[:end-pos]
+                
+            # Hi-hats
+            if texture > 0.3: # Add hi-hats for texture
+                # 8th notes
+                for sub in [0, 0.5]:
+                    hh_pos = int((beat + sub) * seconds_per_beat * sample_rate)
+                    if hh_pos >= len(drum_audio): break
+                    hh = generate_drum_sound('hihat', sample_rate)
+                    end = min(hh_pos + len(hh), len(drum_audio))
+                    drum_audio[hh_pos:end] += hh[:end-hh_pos] * 0.5
 
     if multi_track:
         logger.info("Generating Multi-Track Arrangement (Bass + Melody)...")
@@ -183,7 +240,8 @@ def convert_image_to_music(
             track_octave=2, 
             track_instrument='sine', 
             track_quantize_grid='1/4', 
-            track_chords=False
+            track_chords=False,
+            is_bass=True
         )
         
         # 2. Melody Track (Full Image, High Octave, Fast Rhythm, Selected Instrument)
@@ -202,6 +260,8 @@ def convert_image_to_music(
         # Mix
         logger.info("Mixing tracks...")
         max_len = max(len(bass_audio), len(melody_audio))
+        if drum_audio is not None:
+            max_len = max(max_len, len(drum_audio))
         
         # Pad with zeros
         bass_padded = np.zeros(max_len)
@@ -212,6 +272,11 @@ def convert_image_to_music(
         
         # Mix (Bass slightly quieter)
         song = (bass_padded * 0.6) + melody_padded
+        
+        if drum_audio is not None:
+            drum_padded = np.zeros(max_len)
+            drum_padded[:len(drum_audio)] = drum_audio
+            song += drum_padded * 0.8 # Add drums
         
         # Normalize
         max_val = np.max(np.abs(song))
@@ -227,6 +292,20 @@ def convert_image_to_music(
             track_quantize_grid='1/16', 
             track_chords=use_chords
         )
+        
+        if drum_audio is not None:
+            max_len = max(len(song), len(drum_audio))
+            song_padded = np.zeros(max_len)
+            song_padded[:len(song)] = song
+            
+            drum_padded = np.zeros(max_len)
+            drum_padded[:len(drum_audio)] = drum_audio
+            
+            song = song_padded + drum_padded * 0.8
+            
+            max_val = np.max(np.abs(song))
+            if max_val > 0:
+                song = song / max_val
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
