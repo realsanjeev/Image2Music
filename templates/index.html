@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image2Music Studio</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <h1>Image2Music Studio 🎵</h1>
+    </header>
+
+    <main>
+        <div class="left-panel">
+            <div class="upload-zone" id="uploadZone">
+                <div class="placeholder">
+                    <p>Drag & Drop Image Here</p>
+                    <p style="font-size: 0.8rem; color: var(--text-secondary);">or click to browse</p>
+                </div>
+                <img id="previewImage" src="" alt="Preview">
+                <input type="file" id="imageInput" accept="image/*" style="display: none;">
+            </div>
+            
+            <div class="loading" id="loading">
+                <p>Generating Music... 🎹</p>
+                <p style="font-size: 0.8rem;">This may take a few seconds.</p>
+            </div>
+
+            <div class="player-container" id="playerContainer">
+                <h3>Result</h3>
+                <audio id="audioPlayer" controls></audio>
+                <div class="download-links">
+                    <a id="downloadWav" href="#" class="download-link" download>Download WAV</a>
+                    <a id="downloadMidi" href="#" class="download-link" download>Download MIDI</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="right-panel">
+            <div class="panel">
+                <form id="generateForm">
+                    <div class="control-group">
+                        <h3>Arrangement</h3>
+                        <div class="toggle-row">
+                            <label for="multiTrack">Multi-Track (Bass + Melody)</label>
+                            <input type="checkbox" id="multiTrack" name="multi_track" checked>
+                        </div>
+                        <div class="toggle-row">
+                            <label for="useDrums">Percussion (Drums)</label>
+                            <input type="checkbox" id="useDrums" name="use_drums" checked>
+                        </div>
+                        <div class="toggle-row">
+                            <label for="useChords">Chords (Harmony)</label>
+                            <input type="checkbox" id="useChords" name="use_chords" checked>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <h3>Intelligence</h3>
+                        <div class="toggle-row">
+                            <label for="autoBpm">Auto-BPM (Brightness)</label>
+                            <input type="checkbox" id="autoBpm" name="auto_bpm" checked>
+                        </div>
+                        <div class="toggle-row">
+                            <label for="autoScale">Auto-Scale (Color)</label>
+                            <input type="checkbox" id="autoScale" name="auto_scale" checked>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <h3>Manual Overrides</h3>
+                        <div class="form-row">
+                            <div class="form-item">
+                                <label for="bpm">BPM</label>
+                                <input type="number" id="bpm" name="bpm" value="120" min="40" max="200">
+                            </div>
+                            <div class="form-item">
+                                <label for="scale">Scale</label>
+                                <select id="scale" name="scale">
+                                    <option value="MAJOR">Major</option>
+                                    <option value="MINOR">Minor</option>
+                                    <option value="HARMONIC_MINOR">Harmonic Minor</option>
+                                    <option value="PENTATONIC_MAJOR">Pentatonic Major</option>
+                                    <option value="PENTATONIC_MINOR">Pentatonic Minor</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-item">
+                                <label for="key">Key</label>
+                                <select id="key" name="key">
+                                    <option value="C">C</option>
+                                    <option value="C#">C#</option>
+                                    <option value="D">D</option>
+                                    <option value="D#">D#</option>
+                                    <option value="E">E</option>
+                                    <option value="F">F</option>
+                                    <option value="F#">F#</option>
+                                    <option value="G">G</option>
+                                    <option value="G#">G#</option>
+                                    <option value="A" selected>A</option>
+                                    <option value="A#">A#</option>
+                                    <option value="B">B</option>
+                                </select>
+                            </div>
+                            <div class="form-item">
+                                <label for="instrument">Instrument</label>
+                                <select id="instrument" name="instrument">
+                                    <option value="rich" selected>Rich Synth</option>
+                                    <option value="sine">Sine Wave</option>
+                                    <option value="square">Square Wave</option>
+                                    <option value="organ">Organ</option>
+                                    <option value="woodwind">Woodwind</option>
+                                    <option value="brass">Brass</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <h3>Effects</h3>
+                        <div class="form-item">
+                            <label for="reverb">Reverb Mix</label>
+                            <input type="range" id="reverb" name="reverb" min="0" max="1" step="0.1" value="0.3">
+                        </div>
+                        <div class="form-item">
+                            <label for="delay">Delay Mix</label>
+                            <input type="range" id="delay" name="delay" min="0" max="1" step="0.1" value="0.2">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn-generate" id="generateBtn">Generate Music</button>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const uploadZone = document.getElementById('uploadZone');
+        const imageInput = document.getElementById('imageInput');
+        const previewImage = document.getElementById('previewImage');
+        const generateForm = document.getElementById('generateForm');
+        const generateBtn = document.getElementById('generateBtn');
+        const loading = document.getElementById('loading');
+        const playerContainer = document.getElementById('playerContainer');
+        const audioPlayer = document.getElementById('audioPlayer');
+        const downloadWav = document.getElementById('downloadWav');
+        const downloadMidi = document.getElementById('downloadMidi');
+
+        // Drag & Drop
+        uploadZone.addEventListener('click', () => imageInput.click());
+        
+        uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadZone.style.borderColor = 'var(--accent)';
+        });
+
+        uploadZone.addEventListener('dragleave', () => {
+            uploadZone.style.borderColor = 'var(--border)';
+        });
+
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.style.borderColor = 'var(--border)';
+            if (e.dataTransfer.files.length) {
+                imageInput.files = e.dataTransfer.files;
+                updatePreview();
+            }
+        });
+
+        imageInput.addEventListener('change', updatePreview);
+
+        function updatePreview() {
+            if (imageInput.files && imageInput.files[0]) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    previewImage.src = e.target.result;
+                    uploadZone.classList.add('has-image');
+                };
+                reader.readAsDataURL(imageInput.files[0]);
+            }
+        }
+
+        // Form Submission
+        generateForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            if (!imageInput.files[0]) {
+                alert('Please select an image first!');
+                return;
+            }
+
+            // UI State
+            generateBtn.disabled = true;
+            generateBtn.textContent = 'Generating...';
+            loading.classList.add('active');
+            playerContainer.classList.remove('active');
+
+            const formData = new FormData(generateForm);
+            formData.append('image', imageInput.files[0]);
+            
+            // Add checkbox values explicitly (if unchecked, they aren't sent)
+            formData.set('auto_bpm', document.getElementById('autoBpm').checked);
+            formData.set('auto_scale', document.getElementById('autoScale').checked);
+            formData.set('multi_track', document.getElementById('multiTrack').checked);
+            formData.set('use_drums', document.getElementById('useDrums').checked);
+            formData.set('use_chords', document.getElementById('useChords').checked);
+            formData.set('quantize', true); // Always quantize for web
+
+            try {
+                const response = await fetch('/generate', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    audioPlayer.src = data.audio_url;
+                    downloadWav.href = data.audio_url;
+                    downloadMidi.href = data.midi_url;
+                    playerContainer.classList.add('active');
+                    audioPlayer.play();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('An error occurred during generation.');
+            } finally {
+                generateBtn.disabled = false;
+                generateBtn.textContent = 'Generate Music';
+                loading.classList.remove('active');
+            }
+        });
+    </script>
+</body>
+</html>

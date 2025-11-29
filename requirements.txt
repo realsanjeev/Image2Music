@@ -12,3 +12,4 @@ tqdm
 scikit-learn
 
 notebook
+flask

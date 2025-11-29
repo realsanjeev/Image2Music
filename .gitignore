@@ -161,5 +161,6 @@ cython_debug/
 
 venv_music/
 data/
+uploads/
 *.wav
 *.midi
