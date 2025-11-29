@@ -339,6 +339,7 @@ def hues_dataframe(
     use_kmeans: bool = False,
     image_path: str = None,
     quantize: bool = False,
+    quantize_grid: str = '1/16',
     bpm: int = 120,
     use_chords: bool = False
 ) -> pd.DataFrame:
@@ -361,6 +362,8 @@ def hues_dataframe(
         Path to image file (required if use_kmeans=True)
     quantize : bool
         Quantize durations to musical grid
+    quantize_grid : str
+        Grid resolution ('1/4', '1/8', '1/16', '1/32')
     bpm : int
         Beats per minute (used for quantization)
     use_chords : bool
@@ -441,8 +444,8 @@ def hues_dataframe(
     
     # Apply Quantization
     if quantize:
-        logger.info("Quantizing durations to 1/16th notes at %d BPM", bpm)
-        df["duration"] = df["duration"].apply(lambda d: quantize_duration(d, bpm, grid='1/16'))
+        logger.info("Quantizing durations to %s notes at %d BPM", quantize_grid, bpm)
+        df["duration"] = df["duration"].apply(lambda d: quantize_duration(d, bpm, grid=quantize_grid))
     
     logger.info("Generated DataFrame with %d rows", len(df))
     return df

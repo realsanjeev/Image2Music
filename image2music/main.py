@@ -142,6 +142,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--quantize", action="store_true", help="Quantize rhythm to 1/16th notes.")
     parser.add_argument("--chords", action="store_true", help="Generate chords (triads) instead of single notes.")
     
+    # Advanced Features
+    parser.add_argument("--auto-bpm", action="store_true", help="Auto-detect BPM from image brightness.")
+    parser.add_argument("--auto-scale", action="store_true", help="Auto-detect Scale from image color temperature.")
+    parser.add_argument("--multi-track", action="store_true", help="Generate multi-track arrangement (Bass + Melody).")
+    
     return parser.parse_args()
 
 
@@ -183,7 +188,10 @@ def main():
             delay=args.delay,
             chorus=args.chorus,
             quantize=args.quantize,
-            use_chords=args.chords
+            use_chords=args.chords,
+            auto_bpm=args.auto_bpm,
+            auto_scale=args.auto_scale,
+            multi_track=args.multi_track
         )
         logger.info("Music generation complete! File saved to: %s", output_path)
     except Exception as e:

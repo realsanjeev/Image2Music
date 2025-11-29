@@ -1,6 +1,7 @@
 # image2music/pipeline.py
 
 from pathlib import Path
+import numpy as np
 
 from .logger import get_logger
 from .image_utils import load_image, extract_pixel_data
@@ -39,7 +40,10 @@ def convert_image_to_music(
     delay: float = 0.0,
     chorus: float = 0.0,
     quantize: bool = False,
-    use_chords: bool = False
+    use_chords: bool = False,
+    auto_bpm: bool = False,
+    auto_scale: bool = False,
+    multi_track: bool = False
 ) -> None:
     """
     Convert an image into music (WAV + optional MIDI) by mapping pixel properties to musical parameters.
@@ -86,64 +90,138 @@ def convert_image_to_music(
         Quantize durations to musical grid (1/16th notes)
     use_chords : bool
         Generate chords (triads) instead of single notes
+    auto_bpm : bool
+        Automatically detect BPM from image brightness
+    auto_scale : bool
+        Automatically detect Scale from image color temperature
+    multi_track : bool
+        Generate separate Bass and Melody tracks and mix them
     """
     from .audio_synthesis import ADSR
+    from .image_utils import analyze_image_properties
     
     logger.info("Loading image: %s", image_path)
     img = load_image(image_path, color_space=color_space)
 
-    logger.info("Extracting pixel data with '%s' sampling in %s color space...", sampling_strategy, color_space.upper())
-    pixel_data = extract_pixel_data(
-        img, 
-        sampling_strategy=sampling_strategy,
-        step=grid_step,
-        num_samples=num_samples,
-        color_space=color_space
-    )
-    
-    logger.info("Sampled %d pixels", len(pixel_data[list(pixel_data.keys())[0]]))
+    # Auto-Analysis
+    if auto_bpm or auto_scale:
+        logger.info("Analyzing image for musical properties...")
+        props = analyze_image_properties(img, color_space=color_space)
+        
+        if auto_bpm:
+            bpm = props['bpm']
+            logger.info("Auto-detected BPM: %d (from brightness)", bpm)
+            
+        if auto_scale:
+            scale_name = props['scale']
+            logger.info("Auto-detected Scale: %s (from color temperature)", scale_name)
 
-    logger.info("Generating scale: %s %s octave %d", key, scale_name, octave)
-    scale_freqs, _ = make_scale(octave=octave, key=key.lower(), scale=scale_name)
+    # Helper to generate a track
+    def generate_track(
+        track_img, 
+        track_octave, 
+        track_instrument, 
+        track_quantize_grid, 
+        track_chords
+    ):
+        logger.info("Extracting pixel data for track...")
+        pixel_data = extract_pixel_data(
+            track_img, 
+            sampling_strategy=sampling_strategy,
+            step=grid_step,
+            num_samples=num_samples,
+            color_space=color_space
+        )
+        
+        scale_freqs, _ = make_scale(octave=track_octave, key=key.lower(), scale=scale_name)
 
-    logger.info("Mapping pixels to musical properties...")
-    df = hues_dataframe(
-        pixel_data, 
-        scale_freqs, 
-        base_duration=duration_per_note, 
-        color_space=color_space,
-        use_kmeans=use_kmeans,
-        image_path=image_path,
-        quantize=quantize,
-        bpm=bpm,
-        use_chords=use_chords
-    )
-    
-    # Apply smoothing if requested
-    if smooth_window > 1:
-        df = smooth_parameters(df, window_size=smooth_window)
-    
-    # Add phrase boundaries if requested
-    if phrase_length > 0:
-        df = add_phrase_boundaries(df, phrase_length=phrase_length)
+        df = hues_dataframe(
+            pixel_data, 
+            scale_freqs, 
+            base_duration=duration_per_note, 
+            color_space=color_space,
+            use_kmeans=use_kmeans,
+            image_path=image_path,
+            quantize=quantize,
+            quantize_grid=track_quantize_grid,
+            bpm=bpm,
+            use_chords=track_chords
+        )
+        
+        if smooth_window > 1:
+            df = smooth_parameters(df, window_size=smooth_window)
+        
+        if phrase_length > 0:
+            df = add_phrase_boundaries(df, phrase_length=phrase_length)
 
-    logger.info("Generating song waveform...")
-    
-    # Create ADSR object
-    adsr = ADSR(attack=attack, decay=decay, sustain=sustain, release=release)
-    
-    song = generate_song(
-        frequencies=df["frequency"].tolist(),
-        amplitudes=df["amplitude"].tolist(),
-        durations=df["duration"].tolist(),
-        sample_rate=sample_rate, 
-        use_octaves=use_octaves,
-        instrument=instrument,
-        adsr=adsr,
-        reverb_mix=reverb,
-        delay_mix=delay,
-        chorus_mix=chorus
-    )
+        track_adsr = ADSR(attack=attack, decay=decay, sustain=sustain, release=release)
+        
+        return generate_song(
+            frequencies=df["frequency"].tolist(),
+            amplitudes=df["amplitude"].tolist(),
+            durations=df["duration"].tolist(),
+            sample_rate=sample_rate, 
+            use_octaves=use_octaves,
+            instrument=track_instrument,
+            adsr=track_adsr,
+            reverb_mix=reverb,
+            delay_mix=delay,
+            chorus_mix=chorus
+        )
+
+    if multi_track:
+        logger.info("Generating Multi-Track Arrangement (Bass + Melody)...")
+        
+        # 1. Bass Track (Bottom 20%, Low Octave, Slow Rhythm, Sine/Square)
+        height = img.shape[0]
+        bass_img = img[int(height*0.8):, :, :]
+        logger.info("Generating Bass Track...")
+        bass_audio = generate_track(
+            bass_img, 
+            track_octave=2, 
+            track_instrument='sine', 
+            track_quantize_grid='1/4', 
+            track_chords=False
+        )
+        
+        # 2. Melody Track (Full Image, High Octave, Fast Rhythm, Selected Instrument)
+        logger.info("Generating Melody Track...")
+        melody_audio = generate_track(
+            img, 
+            track_octave=4, 
+            track_instrument=instrument, 
+            track_quantize_grid='1/16', 
+            track_chords=use_chords
+        )
+        
+        # Mix
+        logger.info("Mixing tracks...")
+        max_len = max(len(bass_audio), len(melody_audio))
+        
+        # Pad with zeros
+        bass_padded = np.zeros(max_len)
+        bass_padded[:len(bass_audio)] = bass_audio
+        
+        melody_padded = np.zeros(max_len)
+        melody_padded[:len(melody_audio)] = melody_audio
+        
+        # Mix (Bass slightly quieter)
+        song = (bass_padded * 0.6) + melody_padded
+        
+        # Normalize
+        max_val = np.max(np.abs(song))
+        if max_val > 0:
+            song = song / max_val
+            
+    else:
+        # Single Track (Original Logic)
+        song = generate_track(
+            img, 
+            track_octave=octave, 
+            track_instrument=instrument, 
+            track_quantize_grid='1/16', 
+            track_chords=use_chords
+        )
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)

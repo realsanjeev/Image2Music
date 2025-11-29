@@ -302,3 +302,80 @@ def extract_hues(hsv_img: np.ndarray) -> np.ndarray:
     (Deprecated: Use extract_pixel_data instead)
     """
     return extract_pixel_data(hsv_img)['hue']
+
+
+def analyze_image_properties(img: np.ndarray, color_space: str = 'lch') -> dict:
+    """
+    Analyze global image properties to suggest musical parameters.
+    
+    Returns
+    -------
+    dict
+        Dictionary with suggested 'bpm' and 'scale'.
+    """
+    # Ensure image is in LCH for analysis (easier to reason about)
+    if color_space != 'lch':
+        # This is a simplification; ideally we'd convert. 
+        # But for now let's assume the input img matches the color_space arg.
+        pass
+
+    # Calculate average lightness/brightness
+    if color_space == 'lch':
+        l_channel = img[:, :, 0]
+        avg_lightness = np.mean(l_channel)
+    elif color_space == 'lab':
+        l_channel = img[:, :, 0]
+        avg_lightness = np.mean(l_channel)
+    elif color_space == 'hsv':
+        v_channel = img[:, :, 2]
+        avg_lightness = np.mean(v_channel) / 2.55 # Normalize 0-100
+    else:
+        avg_lightness = 50.0
+
+    # Map Lightness to BPM (Dark=60, Bright=180)
+    # Linear mapping: BPM = 60 + (Lightness/100 * 120)
+    bpm = int(60 + (avg_lightness / 100.0 * 120))
+    bpm = max(60, min(180, bpm)) # Clamp
+
+    # Calculate Color Temperature (Warm vs Cool) to suggest Scale
+    # Warm (Red/Yellow) -> Major
+    # Cool (Blue/Green) -> Minor
+    
+    scale = 'MAJOR' # Default
+    
+    if color_space == 'lch':
+        h_channel = img[:, :, 2]
+        # LCH Hue: 0=Red, 90=Yellow, 180=Green, 270=Blue
+        # Warm: 0-135, 315-360
+        # Cool: 135-315
+        
+        # We need to handle the circular nature of hue
+        # Let's count pixels in warm vs cool ranges
+        warm_mask = (h_channel < 135) | (h_channel > 315)
+        cool_mask = (h_channel >= 135) & (h_channel <= 315)
+        
+        warm_pixels = np.sum(warm_mask)
+        cool_pixels = np.sum(cool_mask)
+        
+        if cool_pixels > warm_pixels:
+            scale = 'MINOR'
+            
+    elif color_space == 'hsv':
+        h_channel = img[:, :, 0]
+        # HSV Hue (0-180 in OpenCV usually, but here we might have 0-360 depending on loading)
+        # Assuming 0-180 for OpenCV standard, or 0-360 if we converted.
+        # Let's assume standard 0-360 for logic
+        
+        # Warm: 0-60 (Red-Yellow), 300-360 (Magenta-Red)
+        # Cool: 60-300 (Green-Cyan-Blue-Purple)
+        
+        warm_mask = (h_channel < 60) | (h_channel > 300)
+        cool_mask = (h_channel >= 60) & (h_channel <= 300)
+        
+        if np.sum(cool_mask) > np.sum(warm_mask):
+            scale = 'MINOR'
+
+    return {
+        'bpm': bpm,
+        'scale': scale
+    }
