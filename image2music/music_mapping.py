@@ -278,13 +278,69 @@ def map_to_duration(value: float, base_duration: float, color_space: str = 'hsv'
     multiplier = 0.5 + (norm * 1.5)
     return base_duration * multiplier
 
+def quantize_duration(
+    duration: float, 
+    bpm: int, 
+    grid: str = '1/16'
+) -> float:
+    """
+    Quantize duration to the nearest musical grid unit.
+    """
+    beat_duration = 60.0 / bpm
+    
+    # Define grid units relative to beat
+    grids = {
+        '1/4': beat_duration,
+        '1/8': beat_duration / 2,
+        '1/16': beat_duration / 4,
+        '1/32': beat_duration / 8
+    }
+    unit = grids.get(grid, beat_duration / 4)
+    
+    # Snap to nearest unit
+    quantized = round(duration / unit) * unit
+    
+    # Ensure minimum duration (at least one unit)
+    return max(quantized, unit)
+
+
+def get_chord_frequencies(root_freq: float, scale_freqs: List[float]) -> List[float]:
+    """
+    Generate a triad (Root, 3rd, 5th) based on the scale.
+    Finds the root frequency in the scale and picks the next notes.
+    """
+    # Find index of root frequency in scale (or closest match)
+    try:
+        # Find exact match
+        idx = scale_freqs.index(root_freq)
+    except ValueError:
+        # Find closest match
+        idx = (np.abs(np.array(scale_freqs) - root_freq)).argmin()
+    
+    # Pick triad: Root (i), 3rd (i+2), 5th (i+4)
+    # Wrap around scale if needed
+    indices = [idx, (idx + 2) % len(scale_freqs), (idx + 4) % len(scale_freqs)]
+    
+    chord = [scale_freqs[i] for i in indices]
+    
+    # If wrapped, bump octave for wrapped notes? 
+    # For simplicity, let's just use the frequencies as is from the scale list.
+    # But if the scale is sorted low->high, wrapping means jumping down in pitch.
+    # Let's just return the frequencies from the scale for now.
+    
+    return chord
+
+
 def hues_dataframe(
     pixel_data: dict, 
     scale_freqs: List[float], 
     base_duration: float = 0.1, 
     color_space: str = 'hsv',
     use_kmeans: bool = False,
-    image_path: str = None
+    image_path: str = None,
+    quantize: bool = False,
+    bpm: int = 120,
+    use_chords: bool = False
 ) -> pd.DataFrame:
     """
     Create a pandas DataFrame with pixel data and mapped musical properties.
@@ -303,6 +359,12 @@ def hues_dataframe(
         Use K-means clustering for perceptual pitch mapping
     image_path : str
         Path to image file (required if use_kmeans=True)
+    quantize : bool
+        Quantize durations to musical grid
+    bpm : int
+        Beats per minute (used for quantization)
+    use_chords : bool
+        Generate chords (triads) instead of single notes
 
     Returns
     -------
@@ -367,8 +429,20 @@ def hues_dataframe(
         # Original linear mapping
         df["frequency"] = df["hue"].apply(lambda h: hue2freq(h, scale_freqs, color_space))
     
+    # Apply Chord Mode
+    if use_chords:
+        logger.info("Generating chords (triads)...")
+        df["frequency"] = df["frequency"].apply(lambda f: get_chord_frequencies(f, scale_freqs))
+
     df["amplitude"] = df["amp_channel"].apply(lambda v: map_to_amplitude(v, color_space))
+    
+    # Duration mapping
     df["duration"] = df["dur_channel"].apply(lambda v: map_to_duration(v, base_duration, color_space))
+    
+    # Apply Quantization
+    if quantize:
+        logger.info("Quantizing durations to 1/16th notes at %d BPM", bpm)
+        df["duration"] = df["duration"].apply(lambda d: quantize_duration(d, bpm, grid='1/16'))
     
     logger.info("Generated DataFrame with %d rows", len(df))
     return df
@@ -396,7 +470,12 @@ def smooth_parameters(df: pd.DataFrame, window_size: int = 3) -> pd.DataFrame:
     df = df.copy()
     
     # Apply rolling mean
-    df['frequency'] = df['frequency'].rolling(window=window_size, center=True, min_periods=1).mean()
+    # Check if frequency column is numeric (not lists/chords)
+    if pd.api.types.is_numeric_dtype(df['frequency']):
+        df['frequency'] = df['frequency'].rolling(window=window_size, center=True, min_periods=1).mean()
+    else:
+        logger.info("Skipping frequency smoothing (non-numeric data detected, likely chords)")
+        
     df['amplitude'] = df['amplitude'].rolling(window=window_size, center=True, min_periods=1).mean()
     df['duration'] = df['duration'].rolling(window=window_size, center=True, min_periods=1).mean()
     

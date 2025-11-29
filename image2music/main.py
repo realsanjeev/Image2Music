@@ -127,6 +127,21 @@ def parse_args() -> argparse.Namespace:
         choices=["sine", "organ", "woodwind", "brass", "rich", "square"],
         help="Instrument timbre."
     )
+    # ADSR Arguments
+    parser.add_argument("--attack", type=float, default=0.01, help="ADSR Attack time (s)")
+    parser.add_argument("--decay", type=float, default=0.1, help="ADSR Decay time (s)")
+    parser.add_argument("--sustain", type=float, default=0.7, help="ADSR Sustain level (0.0-1.0)")
+    parser.add_argument("--release", type=float, default=0.1, help="ADSR Release time (s)")
+    
+    # Effects Arguments
+    parser.add_argument("--reverb", type=float, default=0.1, help="Reverb mix (0.0-1.0)")
+    parser.add_argument("--delay", type=float, default=0.0, help="Delay mix (0.0-1.0)")
+    parser.add_argument("--chorus", type=float, default=0.0, help="Chorus mix (0.0-1.0)")
+    
+    # Musical Structure Arguments
+    parser.add_argument("--quantize", action="store_true", help="Quantize rhythm to 1/16th notes.")
+    parser.add_argument("--chords", action="store_true", help="Generate chords (triads) instead of single notes.")
+    
     return parser.parse_args()
 
 
@@ -159,7 +174,16 @@ def main():
             phrase_length=args.phrase_length,
             color_space=args.color_space,
             use_kmeans=args.use_kmeans,
-            instrument=args.instrument
+            instrument=args.instrument,
+            attack=args.attack,
+            decay=args.decay,
+            sustain=args.sustain,
+            release=args.release,
+            reverb=args.reverb,
+            delay=args.delay,
+            chorus=args.chorus,
+            quantize=args.quantize,
+            use_chords=args.chords
         )
         logger.info("Music generation complete! File saved to: %s", output_path)
     except Exception as e:

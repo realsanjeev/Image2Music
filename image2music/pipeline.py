@@ -30,7 +30,16 @@ def convert_image_to_music(
     phrase_length: int = 8,
     color_space: str = "lch",
     use_kmeans: bool = False,
-    instrument: str = "rich"
+    instrument: str = "rich",
+    attack: float = 0.01,
+    decay: float = 0.1,
+    sustain: float = 0.7,
+    release: float = 0.1,
+    reverb: float = 0.0,
+    delay: float = 0.0,
+    chorus: float = 0.0,
+    quantize: bool = False,
+    use_chords: bool = False
 ) -> None:
     """
     Convert an image into music (WAV + optional MIDI) by mapping pixel properties to musical parameters.
@@ -59,7 +68,27 @@ def convert_image_to_music(
         Use K-means clustering for perceptual pitch mapping
     instrument : str
         Instrument timbre: 'sine', 'organ', 'woodwind', 'brass', 'rich', 'square'
+    attack : float
+        ADSR Attack time (seconds)
+    decay : float
+        ADSR Decay time (seconds)
+    sustain : float
+        ADSR Sustain level (0.0-1.0)
+    release : float
+        ADSR Release time (seconds)
+    reverb : float
+        Reverb mix (0.0-1.0)
+    delay : float
+        Delay mix (0.0-1.0)
+    chorus : float
+        Chorus mix (0.0-1.0)
+    quantize : bool
+        Quantize durations to musical grid (1/16th notes)
+    use_chords : bool
+        Generate chords (triads) instead of single notes
     """
+    from .audio_synthesis import ADSR
+    
     logger.info("Loading image: %s", image_path)
     img = load_image(image_path, color_space=color_space)
 
@@ -84,7 +113,10 @@ def convert_image_to_music(
         base_duration=duration_per_note, 
         color_space=color_space,
         use_kmeans=use_kmeans,
-        image_path=image_path
+        image_path=image_path,
+        quantize=quantize,
+        bpm=bpm,
+        use_chords=use_chords
     )
     
     # Apply smoothing if requested
@@ -96,13 +128,21 @@ def convert_image_to_music(
         df = add_phrase_boundaries(df, phrase_length=phrase_length)
 
     logger.info("Generating song waveform...")
+    
+    # Create ADSR object
+    adsr = ADSR(attack=attack, decay=decay, sustain=sustain, release=release)
+    
     song = generate_song(
         frequencies=df["frequency"].tolist(),
         amplitudes=df["amplitude"].tolist(),
         durations=df["duration"].tolist(),
         sample_rate=sample_rate, 
         use_octaves=use_octaves,
-        instrument=instrument
+        instrument=instrument,
+        adsr=adsr,
+        reverb_mix=reverb,
+        delay_mix=delay,
+        chorus_mix=chorus
     )
 
     output_path = Path(output_path)
