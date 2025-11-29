@@ -40,43 +40,49 @@ def frequencies_to_midi_stream(
             raise ValueError(f"pixel_df must contain a '{col}' column.")
     
     logger.info("Converting frequencies to musical notes...")
+    logger.info("Converting frequencies to musical notes...")
     pixel_df = pixel_df.copy()
     
-    # Filter out rest notes (frequency = 0) - MIDI handles rests differently
-    # We'll just skip them for now
-    pixel_df = pixel_df[pixel_df["frequency"] > 0].reset_index(drop=True)
-    
-    if len(pixel_df) == 0:
-        logger.warning("No non-rest notes to convert to MIDI")
-        midi_stream = stream.Stream()
-        midi_stream.append(tempo.MetronomeMark(number=bpm))
-        return midi_stream
-    
-    pixel_df["notes"] = pixel_df["frequency"].apply(librosa.hz_to_note)
-    
-    # Map amplitude (0.1-1.0) to velocity (60-127) for better audibility
-    # 0.1 -> 60, 1.0 -> 127
-    pixel_df["velocity"] = (60 + pixel_df["amplitude"] * 67).astype(int)
-
-    logger.info("Creating MIDI stream with %d notes...", len(pixel_df))
-    midi_stream = stream.Stream()
-    midi_stream.append(tempo.MetronomeMark(number=bpm))
-
     # Pre-calculate seconds per beat
     seconds_per_beat = 60.0 / bpm
 
-    for _, row in tqdm(pixel_df.iterrows(), total=len(pixel_df), desc="Adding notes"):
-        pitch = row["notes"].replace('♯', "#")
-        midi_note = note.Note(pitch)
-        
-        # Duration to quarterLength
-        midi_note.quarterLength = row["duration"] / seconds_per_beat
-        
-        # Velocity
-        midi_note.volume.velocity = row["velocity"]
-        
-        midi_stream.append(midi_note)
+    logger.info("Creating MIDI stream with %d events...", len(pixel_df))
+    midi_stream = stream.Stream()
+    midi_stream.append(tempo.MetronomeMark(number=bpm))
 
+    for _, row in tqdm(pixel_df.iterrows(), total=len(pixel_df), desc="Adding notes"):
+        freq = row["frequency"]
+        duration = row["duration"]
+        amplitude = row["amplitude"]
+        
+        # Calculate velocity (60-127)
+        velocity = int(60 + amplitude * 67)
+        quarter_length = duration / seconds_per_beat
+        
+        # Handle Chords (List of frequencies)
+        if isinstance(freq, list):
+            # Filter out 0 or invalid frequencies
+            valid_freqs = [f for f in freq if f > 0]
+            if not valid_freqs:
+                continue
+                
+            # Convert Hz to Note Names
+            pitches = [librosa.hz_to_note(f).replace('♯', '#') for f in valid_freqs]
+            
+            # Create Chord
+            m21_chord = m21.chord.Chord(pitches)
+            m21_chord.quarterLength = quarter_length
+            m21_chord.volume.velocity = velocity
+            midi_stream.append(m21_chord)
+            
+        # Handle Single Note (Float/Int)
+        elif freq > 0:
+            pitch = librosa.hz_to_note(freq).replace('♯', '#')
+            m21_note = note.Note(pitch)
+            m21_note.quarterLength = quarter_length
+            m21_note.volume.velocity = velocity
+            midi_stream.append(m21_note)
+            
     return midi_stream
 
 def save_midi(midi_stream: stream.Stream, file_path: Union[str, bytes]) -> None:

@@ -167,7 +167,9 @@ def convert_image_to_music(
             reverb_mix=reverb,
             delay_mix=delay,
             chorus_mix=chorus
-        )
+        ), df
+
+    final_df = None
 
     if multi_track:
         logger.info("Generating Multi-Track Arrangement (Bass + Melody)...")
@@ -176,7 +178,7 @@ def convert_image_to_music(
         height = img.shape[0]
         bass_img = img[int(height*0.8):, :, :]
         logger.info("Generating Bass Track...")
-        bass_audio = generate_track(
+        bass_audio, bass_df = generate_track(
             bass_img, 
             track_octave=2, 
             track_instrument='sine', 
@@ -186,13 +188,16 @@ def convert_image_to_music(
         
         # 2. Melody Track (Full Image, High Octave, Fast Rhythm, Selected Instrument)
         logger.info("Generating Melody Track...")
-        melody_audio = generate_track(
+        melody_audio, melody_df = generate_track(
             img, 
             track_octave=4, 
             track_instrument=instrument, 
             track_quantize_grid='1/16', 
             track_chords=use_chords
         )
+        
+        # Use Melody DF for MIDI output (simplification)
+        final_df = melody_df
         
         # Mix
         logger.info("Mixing tracks...")
@@ -215,7 +220,7 @@ def convert_image_to_music(
             
     else:
         # Single Track (Original Logic)
-        song = generate_track(
+        song, final_df = generate_track(
             img, 
             track_octave=octave, 
             track_instrument=instrument, 
@@ -230,10 +235,10 @@ def convert_image_to_music(
     logger.info("Image-to-music conversion complete! Output saved to: %s", output_path)
 
     # MIDI generation
-    if midi_output_path:
+    if midi_output_path and final_df is not None:
         logger.info("Converting frequencies to MIDI notes...")
         midi_stream = frequencies_to_midi_stream(
-            df, 
+            final_df, 
             bpm=bpm, 
             filter_repeats=False
         )
