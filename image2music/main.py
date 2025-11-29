@@ -115,6 +115,18 @@ def parse_args() -> argparse.Namespace:
         choices=["hsv", "lab", "lch"],
         help="Color space for image analysis (lch recommended for perceptual accuracy)."
     )
+    parser.add_argument(
+        "--use-kmeans",
+        action="store_true",
+        help="Use K-means clustering for perceptual pitch mapping (more cohesive melodies)."
+    )
+    parser.add_argument(
+        "--instrument",
+        type=str,
+        default="rich",
+        choices=["sine", "organ", "woodwind", "brass", "rich", "square"],
+        help="Instrument timbre."
+    )
     return parser.parse_args()
 
 
@@ -145,7 +157,9 @@ def main():
             num_samples=args.num_samples,
             smooth_window=args.smooth,
             phrase_length=args.phrase_length,
-            color_space=args.color_space
+            color_space=args.color_space,
+            use_kmeans=args.use_kmeans,
+            instrument=args.instrument
         )
         logger.info("Music generation complete! File saved to: %s", output_path)
     except Exception as e:

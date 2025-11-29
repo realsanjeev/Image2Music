@@ -9,5 +9,6 @@ pedalboard
 midi-player  ## For playing midi file in notebook
 matplotlib
 tqdm
+scikit-learn
 
 notebook

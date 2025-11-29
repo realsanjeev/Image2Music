@@ -28,7 +28,9 @@ def convert_image_to_music(
     num_samples: int = 50,
     smooth_window: int = 3,
     phrase_length: int = 8,
-    color_space: str = "lch"
+    color_space: str = "lch",
+    use_kmeans: bool = False,
+    instrument: str = "rich"
 ) -> None:
     """
     Convert an image into music (WAV + optional MIDI) by mapping pixel properties to musical parameters.
@@ -53,6 +55,10 @@ def convert_image_to_music(
         Insert rest every N notes (0 = no phrases)
     color_space : str
         Color space for image analysis: 'hsv', 'lab', 'lch' (default: 'lch')
+    use_kmeans : bool
+        Use K-means clustering for perceptual pitch mapping
+    instrument : str
+        Instrument timbre: 'sine', 'organ', 'woodwind', 'brass', 'rich', 'square'
     """
     logger.info("Loading image: %s", image_path)
     img = load_image(image_path, color_space=color_space)
@@ -72,7 +78,14 @@ def convert_image_to_music(
     scale_freqs, _ = make_scale(octave=octave, key=key.lower(), scale=scale_name)
 
     logger.info("Mapping pixels to musical properties...")
-    df = hues_dataframe(pixel_data, scale_freqs, base_duration=duration_per_note, color_space=color_space)
+    df = hues_dataframe(
+        pixel_data, 
+        scale_freqs, 
+        base_duration=duration_per_note, 
+        color_space=color_space,
+        use_kmeans=use_kmeans,
+        image_path=image_path
+    )
     
     # Apply smoothing if requested
     if smooth_window > 1:
@@ -88,7 +101,8 @@ def convert_image_to_music(
         amplitudes=df["amplitude"].tolist(),
         durations=df["duration"].tolist(),
         sample_rate=sample_rate, 
-        use_octaves=use_octaves
+        use_octaves=use_octaves,
+        instrument=instrument
     )
 
     output_path = Path(output_path)
